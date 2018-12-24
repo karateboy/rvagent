@@ -61,44 +61,69 @@ class RvAgent extends Actor with LazyLogging {
   import com.tibco.tibrv._
   val tibrvVer = Tibrv.getVersion
   logger.info(s"Tibro ver=$tibrvVer")
-  if (Tibrv.isIPM()) {
-    logger.info("Tibrv set to IPM")
-    Tibrv.open("./tibrvipm.cfg")
-  } else {
-    logger.info("Tibrv set to native")
-    Tibrv.open(Tibrv.IMPL_NATIVE)
-  }
+
+  logger.info("Tibrv set to native")
+  Tibrv.open(Tibrv.IMPL_NATIVE)
   logger.info(s"Tibrv valid=${Tibrv.isValid()}")
   val transport = new TibrvRvdTransport("8585", "", "tcp:8585")
 
   import com.github.nscala_time.time.Imports._
-  def send(dt: DateTime) {
+  def send(dt: DateTime, computer:String, channel:String, mtDataList: List[(String, String)]) {
     // open Tibrv in native implementation
-    try {
+    try {      
       val msg = new TibrvMsg()
       msg.setSendSubject(subject)
-      msg.add("eqpID", "2AGTA100")
+      msg.add("qpID", "2AGTA100")
+      msg.add("ruleSrvName", "IC_RULEsrv")
+      val userId = if(computer == "IC01")
+        "T2IC01"
+      else
+        "T2TS01"
+        
+      msg.add("userId", userId)
       msg.add("STRMID", "2AGTA100_STR900")
-      msg.add("STRMNO", 1)
-      msg.add("lotId", "")
-      msg.add("lotType", "")
-      msg.add("batchId", "")
-      msg.add("batchType", "")
-      msg.add("samplingFlag", "")
-      msg.add("abnormalFlag", "")
-      msg.add("panelSize", "")
-      msg.add("modelName", "")
-      msg.add("processMode", "")
-      msg.add("productId", "")
-      msg.add("planId", "")
-      msg.add("stepId", "")
-      msg.add("stepHandle", "")
-      msg.add("recipeId", "")
-      msg.add("edcPlanId", "")
-      msg.add("chamberPath", "")
+      msg.add("STRMNO", "1")
+      msg.add("STRMQTY", channel)
+
+      val eapActionMsg = new TibrvMsg()
+      eapActionMsg.add("class", "PDSGlassSend")
+      eapActionMsg.add("tId", "18_2AGTA100_PDSGlass_15:33:33:859")
+      eapActionMsg.add("lotId", "AAEE2A100A01")
+      eapActionMsg.add("componentId", " AAEE2A100A01")
+      eapActionMsg.add("lotType", "P")
+      eapActionMsg.add("batchId", " BPIC0001")
+      eapActionMsg.add("batchType", "P")
+      eapActionMsg.add("samplingFlag", "N")
+      eapActionMsg.add("abnormalFlag", "abnormal")
+      eapActionMsg.add("panelSize", "24")
+      eapActionMsg.add("modelName", "ABA")
+      eapActionMsg.add("processMode", "Dummy")
+      eapActionMsg.add("productId", "BAEJ2A")
+      eapActionMsg.add("planId", "MT180EN01_TOP")
+      eapActionMsg.add("stepId", " 1SD_IC_01")
+      eapActionMsg.add("stepHandle", "X")
+      eapActionMsg.add("recipeId", "X")
+      eapActionMsg.add("eqpPPID", "X")
+      eapActionMsg.add("sourceCarrierId", "09223")
+      eapActionMsg.add("sourceSlotNo", "35")
+      eapActionMsg.add("targetCarrierId", "09224")
+      eapActionMsg.add("targetSlotNo", "22")
+      eapActionMsg.add("edcPlanId", "")
+      val chamberPath = if(computer == "IC01")
+        "00IC001"
+      else
+        "00TS001"
+        
+      eapActionMsg.add("chamberPath", chamberPath)
+      eapActionMsg.add("processQty", "7")
+
       val nowStr = DateTime.now().toString("YYYYMMdd HHmmss")
-      msg.add("trackInTime", nowStr)
-      msg.add("timestamp", dt.toString("YYYYMMdd HHmmss"))
+      eapActionMsg.add("trackInTime", nowStr)
+      eapActionMsg.add("timestamp", dt.toString("YYYYMMdd HHmmss"))
+      eapActionMsg.add("processUnit1", "2AGTA100,00IC001,X, 20170831 153000, 20170831 153100")
+      val mtValStr = mtDataList.map(elm => elm._1 + "," + elm._2).mkString(",")
+      eapActionMsg.add("processData1", mtValStr)
+      msg.add("eapAction", eapActionMsg)
       transport.send(msg);
     } catch {
       case ex: TibrvException =>
@@ -128,24 +153,54 @@ class RvAgent extends Actor with LazyLogging {
 
     val lines =
       try {
-        Files.readAllLines(Paths.get(f.getAbsolutePath), StandardCharsets.UTF_8).asScala.toSeq
+        Files.readAllLines(Paths.get(f.getAbsolutePath), StandardCharsets.ISO_8859_1).asScala
       } catch {
         case ex: Throwable =>
+          logger.error("rvAgent", "failed to read all lines", ex)
           Seq.empty[String]
       }
 
-    if (lines.isEmpty)
+    if (lines.isEmpty) {
       false
-    else {
-      val dt = DateTime.parse(lines(0), DateTimeFormat.forPattern("YYYY/MM/dd HH:mm"))
-      for (i <- 1 to lines.length-1) {
-        val line = lines(i)
-        val elements = line.split(";").toList
-        val ch = elements(2)
-        val mt = elements(3)
-        val v = elements(4)
-        logger.info(s"ch=$ch mt=$mt value=$v")
-        send(dt)
+    } else {
+      def recordParser(unparsed: scala.collection.Seq[String]): List[(DateTime, String, String, List[(String, String)])] = {
+        if (unparsed.length < 2)
+          Nil
+        else {
+          var lineNo = 0
+          var dt: Option[DateTime] = None
+          var data = List.empty[(String, String)]
+          var computer = ""
+          var channel = ""
+          try {
+            dt = Some(DateTime.parse(unparsed(lineNo), DateTimeFormat.forPattern("YYYY/MM/dd HH:mm")))
+            lineNo += 1
+            while (lineNo < unparsed.length) {
+              val unparsed_line = unparsed(lineNo)
+              val elements = unparsed_line.split(";").toList
+              computer = elements(1)
+              channel = elements(2)
+              val mt = elements(3)
+              val v = elements(4)
+              logger.info(s"ch=$channel mt=$mt value=$v")
+              data = data :+ (mt, v)
+              lineNo += 1
+            }
+            (dt.get, computer, channel, data) :: Nil
+          } catch {
+            case _: Throwable =>
+              if (dt.isDefined && !data.isEmpty)
+                (dt.get, computer, channel, data) :: recordParser(unparsed.drop(lineNo))
+              else
+                recordParser(unparsed.drop(lineNo))
+          }
+        }
+      }
+
+      val records = recordParser(lines)
+      logger.debug(s"record = ${records.length}")
+      for (rec <- records) {
+        send(rec._1, rec._2, rec._3, rec._4)
       }
       true
     }
