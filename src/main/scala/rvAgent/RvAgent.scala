@@ -68,59 +68,60 @@ class RvAgent extends Actor with LazyLogging {
   val transport = new TibrvRvdTransport("8585", "", "tcp:8585")
 
   import com.github.nscala_time.time.Imports._
-  def send(dt: DateTime, computer:String, channel:String, mtDataList: List[(String, String)]) {
+  def send(dt: DateTime, computer: String, channel: String, mtDataList: List[(String, String)]) {
     // open Tibrv in native implementation
-    try {      
+    try {
+
+      def get2(v1: String, v2: String) = if (computer == "IC01")
+        v1
+      else
+        v2
+
       val msg = new TibrvMsg()
       msg.setSendSubject(subject)
-      msg.add("qpID", "2AGTA100")
-      msg.add("ruleSrvName", "IC_RULEsrv")
-      val userId = if(computer == "IC01")
-        "T2IC01"
-      else
-        "T2TS01"
-        
-      msg.add("userId", userId)
-      msg.add("STRMID", "2AGTA100_STR900")
+      msg.add("eqpID", get2("2AGTA100", "2AGTS100"))
+      msg.add("ruleSrvName", get2("IC_RULEsrv", "TS_RULEsrv"))
+      msg.add("userId", get2("T2IC01", "T2TS01"))
+      msg.add("STRMID", get2("2AGTA100_STR900", "2AGTS100_STR900"))
       msg.add("STRMNO", "1")
       msg.add("STRMQTY", channel)
 
       val eapActionMsg = new TibrvMsg()
       eapActionMsg.add("class", "PDSGlassSend")
       eapActionMsg.add("tId", "18_2AGTA100_PDSGlass_15:33:33:859")
-      eapActionMsg.add("lotId", "AAEE2A100A01")
-      eapActionMsg.add("componentId", " AAEE2A100A01")
+      eapActionMsg.add("lotId", get2("AAEE2A100A01", "AAEE2A200A01"))
       eapActionMsg.add("lotType", "P")
-      eapActionMsg.add("batchId", " BPIC0001")
+      eapActionMsg.add("batchId", get2("BPIC0001", "BPTS0001"))
+      eapActionMsg.add("componentId", " AAEE2A100A01")
       eapActionMsg.add("batchType", "P")
       eapActionMsg.add("samplingFlag", "N")
       eapActionMsg.add("abnormalFlag", "abnormal")
       eapActionMsg.add("panelSize", "24")
-      eapActionMsg.add("modelName", "ABA")
+      eapActionMsg.add("modelName", get2("ABA", "ABB"))
       eapActionMsg.add("processMode", "Dummy")
       eapActionMsg.add("productId", "BAEJ2A")
-      eapActionMsg.add("planId", "MT180EN01_TOP")
-      eapActionMsg.add("stepId", " 1SD_IC_01")
+      eapActionMsg.add("planId", get2("MT180EN01_TOP", "MT190EN01_TOP"))
+      eapActionMsg.add("stepId", get2("1SD_IC_01", "1SD_TS_01"))
       eapActionMsg.add("stepHandle", "X")
       eapActionMsg.add("recipeId", "X")
       eapActionMsg.add("eqpPPID", "X")
+      eapActionMsg.add("edcPlanId", "X")
       eapActionMsg.add("sourceCarrierId", "09223")
       eapActionMsg.add("sourceSlotNo", "35")
       eapActionMsg.add("targetCarrierId", "09224")
       eapActionMsg.add("targetSlotNo", "22")
-      eapActionMsg.add("edcPlanId", "")
-      val chamberPath = if(computer == "IC01")
-        "00IC001"
-      else
-        "00TS001"
-        
-      eapActionMsg.add("chamberPath", chamberPath)
+      eapActionMsg.add("chamberPath", get2("00IC001", "00TS001"))
       eapActionMsg.add("processQty", "7")
 
       val nowStr = DateTime.now().toString("YYYYMMdd HHmmss")
       eapActionMsg.add("trackInTime", nowStr)
-      eapActionMsg.add("timestamp", dt.toString("YYYYMMdd HHmmss"))
-      eapActionMsg.add("processUnit1", "2AGTA100,00IC001,X, 20170831 153000, 20170831 153100")
+      val tsStr = dt.toString("YYYYMMdd HHmmss")
+      eapActionMsg.add("timestamp", tsStr)
+
+      eapActionMsg.add(
+        "processUnit1",
+        get2(s"2AGTA100,00IC001,X, $nowStr, $tsStr", s"2AGTS100,00IS001,X, $nowStr, $tsStr"))
+
       val mtValStr = mtDataList.map(elm => elm._1 + "," + elm._2).mkString(",")
       eapActionMsg.add("processData1", mtValStr)
       msg.add("eapAction", eapActionMsg)
