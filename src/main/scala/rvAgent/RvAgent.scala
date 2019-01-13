@@ -4,17 +4,43 @@ import akka.actor.{ Actor, ActorLogging, Props, ActorRef }
 import akka.actor.ActorSystem
 import scala.concurrent.ExecutionContext.Implicits.global
 import com.typesafe.scalalogging._
+import scala.collection.JavaConversions._
 
 object RvAgent extends LazyLogging {
   import com.typesafe.config.ConfigFactory
   case object ParseOutput
 
   val config = ConfigFactory.load()
-  val subject = config.getString("subject")
-  logger.info(s"rvAgent subject=$subject")
 
   val inputPath = config.getString("inputPath")
   logger.info(s"inputPath =$inputPath")
+
+  val ic01_props = config.getObject("ic01_prop")
+  val ts01_props = config.getObject("ts01_prop")
+
+  def getChannelMap(name: String) = {
+    val channels = config.getObject(name).entrySet()
+    val channelKV = channels map { ch =>
+      val v = ch.getValue.render()
+      (ch.getKey, v.substring(1, v.length() - 1))
+    }
+    channelKV.toMap
+  }
+
+  val ic01_channelMap = getChannelMap("ic01_channel")
+  val ts01_channelMap = getChannelMap("ts01_channel")
+
+  def getAnMap(name: String) = {
+    val ans = config.getObject(name).entrySet()
+    val anKV = ans map { an =>
+      val v = an.getValue.render()
+      (v.substring(1, v.length() - 1), an.getKey)
+    }
+    anKV.toMap
+  }
+
+  val ic01_anMap = getAnMap("ic01_an")
+  val ts01_anMap = getAnMap("ts01_an")
 
   var receiver: ActorRef = _
   def startup(system: ActorSystem) = {
@@ -24,33 +50,6 @@ object RvAgent extends LazyLogging {
   def parseOutput = {
     receiver ! ParseOutput
   }
-
-  import java.nio.file.{ Paths, Files, StandardOpenOption }
-  import java.nio.charset.{ StandardCharsets }
-  import scala.collection.JavaConverters._
-
-  /*
-  private val parsedFileName = "parsed.txt"
-  private var parsedFileList =
-    try {
-      Files.readAllLines(Paths.get(parsedFileName), StandardCharsets.UTF_8).asScala.toSeq
-    } catch {
-      case ex: Throwable =>
-        Console.println(s"failed to open $parsedFileName")
-        Seq.empty[String]
-    }
-
-  def appendToParsedFileList(filePath: String) = {
-    parsedFileList = parsedFileList ++ Seq(filePath)
-
-    try {
-      Files.write(Paths.get(parsedFileName), (filePath + "\n").getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.APPEND)
-    } catch {
-      case ex: Throwable =>
-        Console.println(ex.getMessage)
-    }
-  }
-	*/
 }
 
 import scala.concurrent.{ Future, Promise }
@@ -68,6 +67,67 @@ class RvAgent extends Actor with LazyLogging {
   val transport = new TibrvRvdTransport("8585", "", "tcp:8585")
 
   import com.github.nscala_time.time.Imports._
+
+  def send2(dt: DateTime, computer: String, channel: String, mtDataList: List[(String, String)]) {
+    // open Tibrv in native implementation
+    try {
+
+      def get2(v1: String, v2: String) = if (computer == "IC01")
+        v1
+      else
+        v2
+
+      val channelMap = if (computer == "IC01")
+        ic01_channelMap
+      else
+        ts01_channelMap
+
+      val props = if (computer == "IC01")
+        ic01_props
+      else
+        ts01_props
+
+      val anMap = if (computer == "IC01")
+        ic01_anMap
+      else
+        ts01_anMap
+
+      val msg = new TibrvMsg()
+      msg.setSendSubject(get2("INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTA100", "INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTS100"))
+      msg.add("eqpID", get2("2AGTA100", "2AGTS100"))
+      msg.add("ruleSrvName", get2("IC_RULEsrv", "TS_RULEsrv"))
+      msg.add("userId", get2("T2IC01", "T2TS01"))
+      msg.add("STRMID", get2("2AGTA100_STR900", "2AGTS100_STR900"))
+      msg.add("STRMNO", "1")
+      msg.add("STRMQTY", channelMap(channel))
+
+      val eapActionMsg = new TibrvMsg()
+      for (p <- props.entrySet()) {
+        val v = p.getValue.render()
+        eapActionMsg.add(p.getKey, v.substring(1, v.length() - 1))
+      }
+
+      val nowStr = DateTime.now().toString("YYYYMMdd HHmmss")
+      eapActionMsg.add("trackInTime", nowStr)
+      val tsStr = dt.toString("YYYYMMdd HHmmss")
+      eapActionMsg.add("timestamp", tsStr)
+
+      eapActionMsg.add(
+        "processUnit1",
+        get2(s"2AGTA100,00IC001,X, $nowStr, $tsStr", s"2AGTS100,00IS001,X, $nowStr, $tsStr"))
+
+      val mtValStr = mtDataList.map(elm => anMap(elm._1) + "," + elm._2).mkString(",")
+      eapActionMsg.add("processData1", mtValStr)
+      msg.add("eapAction", eapActionMsg)
+      transport.send(msg);
+    } catch {
+      case ex: TibrvException =>
+        logger.error("failed to open Tibrv", ex)
+    }
+    logger.info("send complete")
+
+  }
+
   def send(dt: DateTime, computer: String, channel: String, mtDataList: List[(String, String)]) {
     // open Tibrv in native implementation
     try {
@@ -78,7 +138,7 @@ class RvAgent extends Actor with LazyLogging {
         v2
 
       val msg = new TibrvMsg()
-      msg.setSendSubject(subject)
+      msg.setSendSubject(get2("INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTA100", "INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTS100"))
       msg.add("eqpID", get2("2AGTA100", "2AGTS100"))
       msg.add("ruleSrvName", get2("IC_RULEsrv", "TS_RULEsrv"))
       msg.add("userId", get2("T2IC01", "T2TS01"))
@@ -189,19 +249,23 @@ class RvAgent extends Actor with LazyLogging {
             }
             (dt.get, computer, channel, data) :: Nil
           } catch {
-            case _: Throwable =>
+            case ex: java.lang.IndexOutOfBoundsException =>
               if (dt.isDefined && !data.isEmpty)
                 (dt.get, computer, channel, data) :: recordParser(unparsed.drop(lineNo))
               else
                 recordParser(unparsed.drop(lineNo))
+
+            case ex: Throwable =>
+              logger.error("unexpected error", ex)
+              recordParser(Seq.empty[String])
           }
         }
       }
 
       val records = recordParser(lines)
-      logger.debug(s"record = ${records.length}")
+      logger.info(s"record = ${records.length}")
       for (rec <- records) {
-        send(rec._1, rec._2, rec._3, rec._4)
+        send2(rec._1, rec._2, rec._3, rec._4)
       }
       true
     }
