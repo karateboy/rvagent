@@ -15,6 +15,9 @@ object RvAgent extends LazyLogging {
   val inputPath = config.getString("inputPath")
   logger.info(s"inputPath =$inputPath")
 
+  val ts01_config = config.getConfig("ts01_config")
+  val ic01_config = config.getConfig("ic01_config") 
+  
   val ic01_props = config.getObject("ic01_prop")
   val ts01_props = config.getObject("ts01_prop")
 
@@ -34,7 +37,7 @@ object RvAgent extends LazyLogging {
     val ans = config.getObject(name).entrySet()
     val anKV = ans map { an =>
       val v = an.getValue.render()
-      (v.substring(1, v.length() - 1), an.getKey)
+      (an.getKey, v.substring(1, v.length() - 1))
     }
     anKV.toMap
   }
@@ -77,6 +80,11 @@ class RvAgent extends Actor with LazyLogging {
       else
         v2
 
+      val config = if (computer == "IC01")
+        ic01_config
+      else
+        ts01_config
+        
       val channelMap = if (computer == "IC01")
         ic01_channelMap
       else
@@ -93,12 +101,12 @@ class RvAgent extends Actor with LazyLogging {
         ts01_anMap
 
       val msg = new TibrvMsg()
-      msg.setSendSubject(get2("INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTA100", "INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTS100"))
-      msg.add("eqpID", get2("2AGTA100", "2AGTS100"))
-      msg.add("ruleSrvName", get2("IC_RULEsrv", "TS_RULEsrv"))
-      msg.add("userId", get2("T2IC01", "T2TS01"))
-      msg.add("STRMID", get2("2AGTA100_STR900", "2AGTS100_STR900"))
-      msg.add("STRMNO", "1")
+      msg.setSendSubject(config.getString("Subject"))
+      msg.add("eqpID", config.getString("eqpID"))
+      msg.add("ruleSrvName", config.getString("ruleSrvName"))
+      msg.add("userId", config.getString("userId"))
+      msg.add("STRMID", config.getString("STRMID"))
+      msg.add("STRMNO", config.getString("STRMNO"))
       msg.add("STRMQTY", channelMap(channel))
 
       val eapActionMsg = new TibrvMsg()
