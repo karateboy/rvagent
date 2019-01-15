@@ -16,8 +16,8 @@ object RvAgent extends LazyLogging {
   logger.info(s"inputPath =$inputPath")
 
   val ts01_config = config.getConfig("ts01_config")
-  val ic01_config = config.getConfig("ic01_config") 
-  
+  val ic01_config = config.getConfig("ic01_config")
+
   val ic01_props = config.getObject("ic01_prop")
   val ts01_props = config.getObject("ts01_prop")
 
@@ -67,7 +67,9 @@ class RvAgent extends Actor with LazyLogging {
   logger.info("Tibrv set to native")
   Tibrv.open(Tibrv.IMPL_NATIVE)
   logger.info(s"Tibrv valid=${Tibrv.isValid()}")
-  val transport = new TibrvRvdTransport("8585", "", "tcp:8585")
+  //val transport = new TibrvRvdTransport("8585", "", "tcp:8585")
+  val ic01_transport = new TibrvRvdTransport(ic01_config.getString("Service"), "", ic01_config.getString("Daemon"))
+  val ts01_transport = new TibrvRvdTransport(ts01_config.getString("Service"), "", ts01_config.getString("Daemon"))
 
   import com.github.nscala_time.time.Imports._
 
@@ -75,30 +77,17 @@ class RvAgent extends Actor with LazyLogging {
     // open Tibrv in native implementation
     try {
 
-      def get2(v1: String, v2: String) = if (computer == "IC01")
-        v1
-      else
-        v2
+      def choose[T](v1: T, v2: T) =
+        if (computer == "IC01")
+          v1
+        else
+          v2
 
-      val config = if (computer == "IC01")
-        ic01_config
-      else
-        ts01_config
-        
-      val channelMap = if (computer == "IC01")
-        ic01_channelMap
-      else
-        ts01_channelMap
-
-      val props = if (computer == "IC01")
-        ic01_props
-      else
-        ts01_props
-
-      val anMap = if (computer == "IC01")
-        ic01_anMap
-      else
-        ts01_anMap
+      val transport = choose(ic01_transport, ts01_transport)
+      val config = choose(ic01_config, ts01_config)
+      val channelMap = choose(ic01_channelMap, ts01_channelMap)
+      val props = choose(ic01_props, ts01_props)
+      val anMap = choose(ic01_anMap, ts01_anMap)
 
       val msg = new TibrvMsg()
       msg.setSendSubject(config.getString("Subject"))
@@ -122,11 +111,12 @@ class RvAgent extends Actor with LazyLogging {
 
       eapActionMsg.add(
         "processUnit1",
-        get2(s"2AGTA100,00IC001,X, $nowStr, $tsStr", s"2AGTS100,00IS001,X, $nowStr, $tsStr"))
+        choose(s"2AGTA100,00IC001,X, $nowStr, $tsStr", s"2AGTS100,00IS001,X, $nowStr, $tsStr"))
 
       val mtValStr = mtDataList.map(elm => anMap(elm._1) + "," + elm._2).mkString(",")
       eapActionMsg.add("processData1", mtValStr)
       msg.add("eapAction", eapActionMsg)
+
       transport.send(msg);
     } catch {
       case ex: TibrvException =>
@@ -134,71 +124,6 @@ class RvAgent extends Actor with LazyLogging {
     }
     logger.info("send complete")
 
-  }
-
-  def send(dt: DateTime, computer: String, channel: String, mtDataList: List[(String, String)]) {
-    // open Tibrv in native implementation
-    try {
-
-      def get2(v1: String, v2: String) = if (computer == "IC01")
-        v1
-      else
-        v2
-
-      val msg = new TibrvMsg()
-      msg.setSendSubject(get2("INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTA100", "INNOLUX.T2.PROD.PDS.PDSGLASSSEND.ARRAY.2AGTS100"))
-      msg.add("eqpID", get2("2AGTA100", "2AGTS100"))
-      msg.add("ruleSrvName", get2("IC_RULEsrv", "TS_RULEsrv"))
-      msg.add("userId", get2("T2IC01", "T2TS01"))
-      msg.add("STRMID", get2("2AGTA100_STR900", "2AGTS100_STR900"))
-      msg.add("STRMNO", "1")
-      msg.add("STRMQTY", channel)
-
-      val eapActionMsg = new TibrvMsg()
-      eapActionMsg.add("class", "PDSGlassSend")
-      eapActionMsg.add("tId", "18_2AGTA100_PDSGlass_15:33:33:859")
-      eapActionMsg.add("lotId", get2("AAEE2A100A01", "AAEE2A200A01"))
-      eapActionMsg.add("lotType", "P")
-      eapActionMsg.add("batchId", get2("BPIC0001", "BPTS0001"))
-      eapActionMsg.add("componentId", " AAEE2A100A01")
-      eapActionMsg.add("batchType", "P")
-      eapActionMsg.add("samplingFlag", "N")
-      eapActionMsg.add("abnormalFlag", "abnormal")
-      eapActionMsg.add("panelSize", "24")
-      eapActionMsg.add("modelName", get2("ABA", "ABB"))
-      eapActionMsg.add("processMode", "Dummy")
-      eapActionMsg.add("productId", "BAEJ2A")
-      eapActionMsg.add("planId", get2("MT180EN01_TOP", "MT190EN01_TOP"))
-      eapActionMsg.add("stepId", get2("1SD_IC_01", "1SD_TS_01"))
-      eapActionMsg.add("stepHandle", "X")
-      eapActionMsg.add("recipeId", "X")
-      eapActionMsg.add("eqpPPID", "X")
-      eapActionMsg.add("edcPlanId", "X")
-      eapActionMsg.add("sourceCarrierId", "09223")
-      eapActionMsg.add("sourceSlotNo", "35")
-      eapActionMsg.add("targetCarrierId", "09224")
-      eapActionMsg.add("targetSlotNo", "22")
-      eapActionMsg.add("chamberPath", get2("00IC001", "00TS001"))
-      eapActionMsg.add("processQty", "7")
-
-      val nowStr = DateTime.now().toString("YYYYMMdd HHmmss")
-      eapActionMsg.add("trackInTime", nowStr)
-      val tsStr = dt.toString("YYYYMMdd HHmmss")
-      eapActionMsg.add("timestamp", tsStr)
-
-      eapActionMsg.add(
-        "processUnit1",
-        get2(s"2AGTA100,00IC001,X, $nowStr, $tsStr", s"2AGTS100,00IS001,X, $nowStr, $tsStr"))
-
-      val mtValStr = mtDataList.map(elm => elm._1 + "," + elm._2).mkString(",")
-      eapActionMsg.add("processData1", mtValStr)
-      msg.add("eapAction", eapActionMsg)
-      transport.send(msg);
-    } catch {
-      case ex: TibrvException =>
-        logger.error("failed to open Tibrv", ex)
-    }
-    logger.info("send complete")
   }
 
   def receive = {
@@ -315,7 +240,8 @@ class RvAgent extends Actor with LazyLogging {
   }
 
   override def postStop = {
-    transport.destroy()
+    ts01_transport.destroy()
+    ic01_transport.destroy()
     Tibrv.close()
   }
 }
