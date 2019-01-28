@@ -73,6 +73,7 @@ class RvAgent extends Actor with LazyLogging {
 
   import com.github.nscala_time.time.Imports._
 
+  var seq = 1
   def send2(dt: DateTime, computer: String, channel: String, mtDataList: List[(String, String)]) {
     // open Tibrv in native implementation
     try {
@@ -94,7 +95,10 @@ class RvAgent extends Actor with LazyLogging {
       msg.add("eqpID", config.getString("eqpID"))
       msg.add("ruleSrvName", config.getString("ruleSrvName"))
       msg.add("userId", config.getString("userId"))
-      msg.add("STRMID", config.getString("STRMID"))
+      val strmid_fmt = choose("%02d_2AGTA100_EapGlassDataReportInt_%s", "%02d_2AGTS100_EapGlassDataReportInt_%s")
+      val strmid = strmid_fmt.format(seq, dt.toString("HH:mm:ss0"))
+      seq+=1
+      msg.add("STRMID", strmid)
       msg.add("STRMNO", config.getString("STRMNO"))
       msg.add("STRMQTY", channelMap(channel))
 

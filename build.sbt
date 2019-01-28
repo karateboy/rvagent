@@ -14,6 +14,6 @@ lazy val root = (project in file(".")).
     libraryDependencies += "com.typesafe" % "config" % "1.3.3",
     libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.20.0",
     libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.5.19",
-	scalacOptions ++= Seq("-feature")
+	scalacOptions ++= Seq("-feature", "-deprecation")
   )
 
