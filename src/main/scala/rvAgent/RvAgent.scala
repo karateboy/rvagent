@@ -4,7 +4,7 @@ import akka.actor.{ Actor, ActorLogging, Props, ActorRef }
 import akka.actor.ActorSystem
 import scala.concurrent.ExecutionContext.Implicits.global
 import com.typesafe.scalalogging._
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 object RvAgent extends LazyLogging {
   import com.typesafe.config.ConfigFactory
@@ -23,7 +23,7 @@ object RvAgent extends LazyLogging {
 
   def getChannelMap(name: String) = {
     val channels = config.getObject(name).entrySet()
-    val channelKV = channels map { ch =>
+    val channelKV = channels.asScala map { ch =>
       val v = ch.getValue.render()
       (ch.getKey, v.substring(1, v.length() - 1))
     }
@@ -35,7 +35,7 @@ object RvAgent extends LazyLogging {
 
   def getAnMap(name: String) = {
     val ans = config.getObject(name).entrySet()
-    val anKV = ans map { an =>
+    val anKV = ans.asScala map { an =>
       val v = an.getValue.render()
       (an.getKey, v.substring(1, v.length() - 1))
     }
@@ -96,14 +96,16 @@ class RvAgent extends Actor with LazyLogging {
       msg.add("ruleSrvName", config.getString("ruleSrvName"))
       msg.add("userId", config.getString("userId"))
       val strmid_fmt = choose("%02d_2AGTA100_EapGlassDataReportInt_%s", "%02d_2AGTS100_EapGlassDataReportInt_%s")
-      val strmid = strmid_fmt.format(seq, dt.toString("HH:mm:ss0"))
+      val strmid = strmid_fmt.format(seq, dt.toString("HH:mm:ss:000"))
       seq+=1
       msg.add("STRMID", strmid)
       msg.add("STRMNO", config.getString("STRMNO"))
       msg.add("STRMQTY", channelMap(channel))
 
       val eapActionMsg = new TibrvMsg()
-      for (p <- props.entrySet()) {
+      eapActionMsg.add("class", "PDSGlassSend")
+      eapActionMsg.add("tId", strmid_fmt.format(seq, dt.toString("HH:mm:ss:000")))
+      for (p <- props.entrySet().asScala) {
         val v = p.getValue.render()
         eapActionMsg.add(p.getKey, v.substring(1, v.length() - 1))
       }
@@ -115,9 +117,9 @@ class RvAgent extends Actor with LazyLogging {
 
       eapActionMsg.add(
         "processUnit1",
-        choose(s"2AGTA100,00IC001,X, $nowStr, $tsStr", s"2AGTS100,00IS001,X, $nowStr, $tsStr"))
+        choose(s"${channelMap(channel)},,IC01, $nowStr, $tsStr", s"${channelMap(channel)},,TS01, $nowStr, $tsStr"))
 
-      val mtValStr = mtDataList.map(elm => anMap(elm._1) + "," + elm._2).mkString(",")
+      val mtValStr = mtDataList.map(elm => anMap(elm._1) + "=" + elm._2).mkString(",")
       eapActionMsg.add("processData1", mtValStr)
       msg.add("eapAction", eapActionMsg)
 
