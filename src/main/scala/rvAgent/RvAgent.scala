@@ -91,7 +91,9 @@ class RvAgent extends Actor with LazyLogging {
       val anMap = choose(ic01_anMap, ts01_anMap)
 
       val msg = new TibrvMsg()
+	  import java.nio.charset.Charset
       msg.setSendSubject(config.getString("Subject"))
+      msg.add(">>L FwEapComplexTxn msgTag", "FwEapComTxn".getBytes(Charset.forName("UTF-8")), TibrvMsg.OPAQUE)
       msg.add("eqpID", config.getString("eqpID"))
       msg.add("ruleSrvName", config.getString("ruleSrvName"))
       msg.add("userId", config.getString("userId"))
@@ -100,10 +102,10 @@ class RvAgent extends Actor with LazyLogging {
       seq+=1
       msg.add("STRMID", strmid)
       msg.add("STRMNO", config.getString("STRMNO"))
-      msg.add("STRMQTY", channelMap(channel))
+      msg.add("STRMQTY", "1")
 
       val eapActionMsg = new TibrvMsg()
-      eapActionMsg.add("class", "PDSGlassSend")
+      eapActionMsg.add("class", "PDSGlassSend".getBytes(Charset.forName("UTF-8")), TibrvMsg.OPAQUE)
       eapActionMsg.add("tId", strmid_fmt.format(seq, dt.toString("HH:mm:ss:000")))
       for (p <- props.entrySet().asScala) {
         val v = p.getValue.render()
@@ -117,7 +119,7 @@ class RvAgent extends Actor with LazyLogging {
 
       eapActionMsg.add(
         "processUnit1",
-        choose(s"${channelMap(channel)},,IC01, $nowStr, $tsStr", s"${channelMap(channel)},,TS01, $nowStr, $tsStr"))
+        choose(s"${channelMap(channel)},,IC01, $tsStr, $nowStr", s"${channelMap(channel)},,TS01, $tsStr, $nowStr"))
 
       val mtValStr = mtDataList.map(elm => anMap(elm._1) + "=" + elm._2).mkString(",")
       eapActionMsg.add("processData1", mtValStr)
