@@ -91,22 +91,22 @@ class RvAgent extends Actor with LazyLogging {
       val anMap = choose(ic01_anMap, ts01_anMap)
 
       val msg = new TibrvMsg()
-	  import java.nio.charset.Charset
-      msg.setSendSubject(config.getString("Subject"))
-      msg.add(">>L FwEapComplexTxn msgTag", "FwEapComTxn".getBytes(Charset.forName("UTF-8")), TibrvMsg.OPAQUE)
-      msg.add("eqpID", config.getString("eqpID"))
+      
+      msg.setSendSubject(config.getString("Subject"))          
+      val msgHeader = ">>L FwEapComplexTxn msgTag=FwEapComTxn "
+      msg.add(s"$msgHeader eqpID", config.getString("eqpID"))
       msg.add("ruleSrvName", config.getString("ruleSrvName"))
       msg.add("userId", config.getString("userId"))
       val strmid_fmt = choose("%02d_2AGTA100_EapGlassDataReportInt_%s", "%02d_2AGTS100_EapGlassDataReportInt_%s")
       val strmid = strmid_fmt.format(seq, dt.toString("HH:mm:ss:000"))
-      seq+=1
+      seq += 1
       msg.add("STRMID", strmid)
       msg.add("STRMNO", config.getString("STRMNO"))
       msg.add("STRMQTY", "1")
 
       val eapActionMsg = new TibrvMsg()
-      eapActionMsg.add("class", "PDSGlassSend".getBytes(Charset.forName("UTF-8")), TibrvMsg.OPAQUE)
-      eapActionMsg.add("tId", strmid_fmt.format(seq, dt.toString("HH:mm:ss:000")))
+      val classHeader = "class=PDSGlassSend"
+      eapActionMsg.add(s"$classHeader tId", strmid_fmt.format(seq, dt.toString("HH:mm:ss:000")))
       for (p <- props.entrySet().asScala) {
         val v = p.getValue.render()
         eapActionMsg.add(p.getKey, v.substring(1, v.length() - 1))

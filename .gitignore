@@ -17,6 +17,5 @@ server.pid
 .cache-*
 /.settings
 /.sbtserver
-/conf/application.conf
 /bin/
 .idea/
