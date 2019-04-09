@@ -93,7 +93,7 @@ class RvAgent extends Actor with LazyLogging {
       val msg = new TibrvMsg()
       
       msg.setSendSubject(config.getString("Subject"))          
-      val msgHeader = ">>L FwEapComplexTxn msgTag=FwEapComTxn "
+      val msgHeader = ">>L FwEapComplexTxn msgTag=FwEapComplexTxn "
       msg.add(s"$msgHeader eqpID", config.getString("eqpID"))
       msg.add("ruleSrvName", config.getString("ruleSrvName"))
       msg.add("userId", config.getString("userId"))
