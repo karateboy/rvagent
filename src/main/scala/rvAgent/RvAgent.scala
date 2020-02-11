@@ -68,8 +68,8 @@ class RvAgent extends Actor with LazyLogging {
   Tibrv.open(Tibrv.IMPL_NATIVE)
   logger.info(s"Tibrv valid=${Tibrv.isValid()}")
   //val transport = new TibrvRvdTransport("8585", "", "tcp:8585")
-  val ic01_transport = new TibrvRvdTransport(ic01_config.getString("Service"), "", ic01_config.getString("Daemon"))
-  val ts01_transport = new TibrvRvdTransport(ts01_config.getString("Service"), "", ts01_config.getString("Daemon"))
+  val ic01_transport = new TibrvRvdTransport(ic01_config.getString("Service"), ic01_config.getString("Network"), ic01_config.getString("Daemon"))
+  val ts01_transport = new TibrvRvdTransport(ts01_config.getString("Service"), ts01_config.getString("Network"), ts01_config.getString("Daemon"))
 
   import com.github.nscala_time.time.Imports._
 
